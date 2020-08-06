@@ -46,9 +46,7 @@ class MCTS():
         """
 
         # Convert the latest state to a string so we can index it
-        s = state.board.board_state.tostring()
-
-        #print("Searching from ", env_history[0].board.board_state)
+        s = state.serialize()
 
         # Run numTrainSims games from the current board position
         # to sample the available moves; this can be done in parallel!
@@ -57,7 +55,7 @@ class MCTS():
         for i in range(self.numTrainSims):
             self.search_move(state, depth=0, reveal=reveal)
 
-        # Optionally add dirichlet noise
+        # Optionally add dirichlet noise, w/ amplitude proportinal to the avg number of available legal moves
         #eps = 0.25
         #if s in self.P:
         #    self.P[s] = list( (1-eps)*np.array(self.P[s]) + np.array(np.random.dirichlet(0.03, size=self.action_size))*eps )
@@ -97,7 +95,7 @@ class MCTS():
             return -1
 
         # Turn board into a string so that we can use it as a dictionary key (hashable)
-        s = state.board.board_state.tostring()
+        s = state.serialize()
 
         # Make a copy of the history
         #history = copy.deepcopy(env_history)
@@ -106,11 +104,6 @@ class MCTS():
         if s not in self.Es:
             if state.done:
                 self.Es[s] = state.reward
-
-                # If we don't want to reveal the initial errors, clearing
-                # the board always is a win
-                if not reveal:
-                    self.Es[s] = 1
             else:
                 self.Es[s] = 0
 
@@ -122,15 +115,14 @@ class MCTS():
 
         # Leaf node - expand it and return
         if s not in self.P:
-
             if self.config["verbose"] >= 2:
                 print("Is Leaf")
 
             # Convert history to boards only so that the NN can predict
-            self.P[s], v = self.NN.predict(state.board_history)
+            self.P[s], v = self.NN.predict(state.representation())
 
             # Mask the illegal actions
-            valids = np.array(state.board.get_legal_action())
+            valids = np.array(state.get_legal_actions())
             valids = np.array([1 if vl in valids else 0 for vl in range(self.env.action_space.shape)])
 
 

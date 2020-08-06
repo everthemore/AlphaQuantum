@@ -32,9 +32,6 @@ class AlphaQuantumAgent():
         self.checkpoint            = config["savedir"]
         self.numHistory            = config["numHistory"]
 
-        # Monte Carlo Tree Search for thinking ahead
-        self.mcts = MCTS(self.env, self.nnet, config)
-
     def executeEpisode(self):
         """
         This function executes one episode of self-play, starting with player 1.
@@ -54,61 +51,38 @@ class AlphaQuantumAgent():
 
         trainExamples = []
 
-        # Replacement history
+        # The current state of the game
         state = self.env.state
 
-        episodeStep = 0
         while True:
-            episodeStep += 1
-
 	        # Get the policy vector given the current history
             pi = self.mcts.getPolicy(state, temperature=0)
 
-            #print("Policy: ", pi)
-            #pi = np.array([1 for v in range(self.env.action_space.shape)])
-
             # Mask out the invalid moves
-            valids = state.board.get_legal_action()
+            valids = state.get_legal_action()
             valids = np.array([1 if vl in valids else 0 for vl in range(self.env.action_space.shape)])
 
+            # Renormalize
             if np.sum(valids) == 0:
                 valids[0] = 1
             pi = np.array(pi*valids); pi = pi/np.sum(pi)
 
-            # Use symmetric boards
-            #sym = self.game.getSymmetries(self.board_history, pi)
-            #for b,p in sym:
-            #    trainExamples.append([b, p])
-
-            # Only store the boards and the resulting policy
+            # Only store the boards and the resulting policy, which is what we
+            # want the neural network to learn to map
             trainExamples.append([state.board_history, np.array(pi)])
 
 	        # Make a greedy move
-            action = np.argmax(pi)
-            #action = np.random.choice(len(pi), p=pi)
+            # action = np.argmax(pi)
+            # Pick according to the probability distribution
+            action = np.random.choice(len(pi), p=pi)
 
-            # See if we have to update the history
+            # Move to the next state
             state = state.act(action)
 
-            #print("Action %d: %d"%(len(trainExamples), action))
-            if state.reward !=0 and state.done:
+            # If we get to a terminal state w/ non-zero reward, or a tie
+            if state.reward !=0 or state.done:
                 print("Finished game with r = %.2f in %d moves"%(state.reward, len(trainExamples))) #int(len(trainExamples)/3)))
-                return [(x[0],x[1],1 if state.reward > 0 else -1) for x in trainExamples]
-
-    def setnewboard(self):
-        """
-        Reset the game, until we find a non-trivial board to play.
-        """
-        # Find the next non-trivial board
-        self.currentseed += 1
-        np.random.seed(self.currentseed)
-        self.env.reset()
-
-        # Keep resetting until non-trivial - meaning this is not a terminal state
-        while self.env.state.done:
-            self.currentseed += 1
-            np.random.seed(self.currentseed)
-            self.env.reset()
+                return [(x[0],x[1],state.reward) for x in trainExamples]
 
     def learn(self):
         """
@@ -122,43 +96,28 @@ class AlphaQuantumAgent():
 	    # Create an empty queue for storing all the training examples
         trainExamples = deque([], maxlen=self.maxLenOfQueue)
 
-	    # Set the initial seed
-        self.currentseed = -1
-
-	    # Initial error rate
-        errorrate = 0.01
-        self.env.error_rate = errorrate
-
 	    # Keep track of the number of snapshots so we can label them
         num_snapshots = 0
 
         for i in range(self.numIterations):
-            # Change the error rate every 10 iterations
             if (i % 10 == 0) and (i != 0):
-
-                # Cap the error rate at 0.15
-                if errorrate < 0.15:
-                    errorrate = errorrate + 0.01
-
-                # Update the error rates
-                self.env.error_rate = errorrate
-
                 # Save a snapshot of the network for evaluation later
                 self.nnet.save_checkpoint(folder=self.checkpoint, filename='checkpoint-%d.pth.tar'%num_snapshots)
                 num_snapshots += 1
 
             print('------ITER ' + str(i+1) + '------')
             for eps in range(self.numEpisodes):
-		        # Get a new board with the current error rate
-                self.setnewboard()
+                # Reset the game
+		        self.env.reset()
 
-                self.mcts = MCTS(self.env, self.nnet, self.config) # reset tree
+                # Reset the MC tree
+                self.mcts = MCTS(self.env, self.nnet, self.config)
+
+                # Run an episode and commit it to the list of training examples
                 trainExamples += self.executeEpisode()
 
 	        # Train the network
-            #print("Training the network on %d examples"%(len(trainExamples)))
-            trainhistory = self.nnet.train(trainExamples)
-            #print("Done")
+            train_history = self.nnet.train(trainExamples)
 
             # Save a copy of the current network
             self.nnet.save_checkpoint(folder=self.checkpoint, filename='best.pth.tar')

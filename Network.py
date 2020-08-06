@@ -37,7 +37,7 @@ class Network():
         Build the network model using Keras.
         """
         # Neural Net
-        self.input_boards = Input(shape=(self.len_history, self.board_x, self.board_y)) # s: batch_size x board_x x board_y x T
+        self.input_boards = Input(shape=(self.len_history, self.board_x, self.board_y))
         x_image = Reshape((self.len_history, self.board_x, self.board_y))(self.input_boards)
 
         np.random.seed(0)
