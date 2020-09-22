@@ -149,7 +149,6 @@ class QuantumChessGame:
         print(s)
 
 if( __name__ == "__main__"):
-
     QChessGame = QuantumChessGame()
     QChessGame.new_game()
 

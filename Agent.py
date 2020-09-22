@@ -31,6 +31,7 @@ class AlphaQuantumAgent():
         self.numEpisodes           = config["Training"]["numEpisodes"]
         self.checkpoint            = config["savedir"]
         self.numHistory            = config["numHistory"]
+        self.num_contests          = config["Training"]["numContests"]
 
     def executeEpisode(self):
         """
@@ -100,12 +101,14 @@ class AlphaQuantumAgent():
         num_snapshots = 0
 
         for i in range(self.numIterations):
+            print('------ITER ' + str(i+1) + '------')
+            
             if (i % 10 == 0) and (i != 0):
                 # Save a snapshot of the network for evaluation later
                 self.nnet.save_checkpoint(folder=self.checkpoint, filename='checkpoint-%d.pth.tar'%num_snapshots)
                 num_snapshots += 1
 
-            print('------ITER ' + str(i+1) + '------')
+            # TODO: Run many in parallel!
             for eps in range(self.numEpisodes):
                 # Reset the game
 		        self.env.reset()
@@ -118,6 +121,47 @@ class AlphaQuantumAgent():
 
 	        # Train the network
             train_history = self.nnet.train(trainExamples)
+            
+            if( i == 0 ):
+                # The best network is the current one
+                self.nnet.save_checkpoint(folder=self.checkpoint, filename='best.pth.tar')
 
-            # Save a copy of the current network
-            self.nnet.save_checkpoint(folder=self.checkpoint, filename='best.pth.tar')
+            if( i % self.check_freq == 0 and i != 0 ):
+                # Run a bunch of games with the current network and with the best network
+                # Keep going with the one that is best
+                best_network = Network(self.env, self.config)
+                best_network.load_checkpoint(folder=self.checkpoint, filename='best.pth.tar')
+                
+                currentwins, bestwins, draws = self.contest( self.nnet, best_network, self.num_contests )
+                
+                # If the current is 5% better than the best
+                if( currentwins + bestwins > 0 and currentwins/(currentwins+bestwins) > 0.05 ):
+                    # Overwrite the best
+                    self.nnet.save_checkpoint(folder=self.checkpoint, filename='best.pth.tar')
+                    
+    def contest( currentNetwork, bestNetwork, numContests ):
+        
+        currentwins, bestwins, draws = 0, 0, 0
+
+        # TODO: Parallelize
+        for game in range(numContests):
+            # Reset the search tree
+            currentMCTS = MCTS(self.env, currentNetwork, self.config)
+            bestMCTS = MCTS(self.env, bestNetwork, self.config)            
+
+            self.env.reset()
+
+            # Build the history
+            state = local_env.state
+
+            while !state.done:
+                action = np.argmax(mcts.getPolicy(state, temperature=0))
+                state = state.act(action)
+
+            # The game ended, increase the number of wins if we won
+            if state.reward == 0:
+                draws += 1
+            elif state.reward == 1:
+                currentWins += 1
+
+        return currentwins, bestwins, draws

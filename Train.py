@@ -14,6 +14,8 @@ parser.add_argument("-f", "--file", help="Config file to load (overrides other s
 parser.add_argument("--numTrainSims", type=int, default=200, help="Number of MCTS simulations during training")
 parser.add_argument("--numHistory", type=int, default=1, help="Number of steps of history tracked by the Agent")
 parser.add_argument("--numIterations", type=int, default=100, help="Number of iterations during training. Each iteration has numEpisodes training examples.")
+parser.add_argument("--numContests", type=int, default=10, help="Number of contests between current and best network.")
+
 parser.add_argument("--numEpisodes", type=int, default=25, help="Number of episodes per iteration (number of training examples)")
 parser.add_argument("--numFilters", type=int, default=64, help="Number of convolutional filters")
 parser.add_argument("--kernelSize", type=int, default=3, help="Convolutional filter size")
@@ -51,6 +53,7 @@ else:
             "numIterations":    args.numIterations,
             "numEpisodes":      args.numEpisodes,
             "tempThreshold":    args.tempThreshold,
+            "numContests":      args.numContests,
         },
 
         "MCTS": {
@@ -76,7 +79,8 @@ with open('%s/config.json'%checkpoint,'w') as f:
 env = QuantumChessEnv()
 # Create a new neural network
 nnet = Network(env, JsonConfig)
-# Create a new agent, whose 'brain' is the network we just created
+# Create a new agent, whose brain is the network we just created
 c = AlphaQuantumAgent(env, nnet, JsonConfig)
+
 # Start the main training loop
 c.learn()

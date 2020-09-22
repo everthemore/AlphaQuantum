@@ -3,7 +3,7 @@ import math
 import numpy as np
 import copy
 
-class MCTS():
+class MCTS:
     """
     This class handles the MCTS.
     """
@@ -15,24 +15,21 @@ class MCTS():
 
         # Store the arguments
         self.config         = config
-        self.numTrainSims   = config["MCTS"]["numSims"]
+        self.numSims        = config["MCTS"]["numSims"]
         self.cpuct          = config["MCTS"]["cpuct"]
 
         self.action_size    = self.env.action_space.shape
 
         self.Qsa = {}       # stores Q values for s,a (as defined in the paper)
         self.Nsa = {}       # stores #times edge s,a was visited
-
-        self.N = {}         # stores #times board s was visited
-        self.P = {}         # stores initial policy (returned by neural net) for s
-        self.V = {}         # Stores the value function for state s
-
+        self.N   = {}       # stores #times board s was visited
+        self.P   = {}       # stores initial policy (returned by neural net) for s
+        self.V   = {}       # Stores the value function for state s
         self.Es = {}        # stores reward for board s
-        self.Vs = {}        # stores valid moves for board s
 
-    def getPolicy(self, state, temperature=1, reveal=True):
+    def getPolicy(self, state, temperature=1):
         """
-        Get the policy for the current board, by performing numTrainSims MC simulations.
+        Get the policy for the current board, by performing numSims MC simulations.
 
         Parameters:
             env_history    : (list) environments representing the history
@@ -48,11 +45,12 @@ class MCTS():
         # Convert the latest state to a string so we can index it
         s = state.serialize()
 
-        # Run numTrainSims games from the current board position
-        # to sample the available moves; this can be done in parallel!
-        #env_history_copy = copy.deepcopy(env_history)
+        # Run numSims games from the current board position
+        # to sample the available moves
+
+        # TODO this can be done in parallel using a thread pool!
         # @parallel
-        for i in range(self.numTrainSims):
+        for i in range(self.numSims):
             self.search_move(state, depth=0, reveal=reveal)
 
         # Optionally add dirichlet noise, w/ amplitude proportinal to the avg number of available legal moves
@@ -73,13 +71,16 @@ class MCTS():
             pi = np.zeros( len(counts) ); pi[ np.argmax(counts) ] = 1
         else:
             pi = np.array(counts)**(1/temp); pi /= np.sum(counts)
-        return pi
+            
+        # Normalize and return
+        return pi / np.sum(pi)
 
     def search_move(self, state, depth, reveal=True):
         """
         Recursively search for moves until we hit a leaf node (by maximizing
-        the upper confidence bound (UCB). Once we find a leaf, we expand it and
-        evaluate the probabilities P(a|s) by asking the neural network.
+        the upper confidence bound (UCB)), counting as one simulation. 
+        Once we find a leaf, we expand it and evaluate the probabilities P(a|s) 
+        by asking the neural network.
 
         The network also returns a value v, which we then propagate back up the
         search path. If the leaf is also a terminal state, we propagate the win
@@ -96,35 +97,34 @@ class MCTS():
 
         # Turn board into a string so that we can use it as a dictionary key (hashable)
         s = state.serialize()
-
-        # Make a copy of the history
-        #history = copy.deepcopy(env_history)
+        
+        # Make a copy of the state
+        this_state = copy.deepcopy(state)
 
         # Check if this is a terminal state
-        if s not in self.Es:
-            if state.done:
-                self.Es[s] = state.reward
-            else:
+        if s not in self.Es: # If we haven't seen this state before
+            if this_state.done:   # If it is a final state
+                self.Es[s] = this_state.reward
+            else:            # Otherwise initialize it with 0
                 self.Es[s] = 0
 
-        if self.Es[s]!=0:
+        if self.Es[s] != 0:
             return self.Es[s]
 
         if self.config["verbose"] >= 2:
             print("Non terminal, has value: ", self.Es[s])
 
-        # Leaf node - expand it and return
+        # This must be a leaf node if we haven't encountered it before - expand it and return
         if s not in self.P:
             if self.config["verbose"] >= 2:
                 print("Is Leaf")
 
-            # Convert history to boards only so that the NN can predict
-            self.P[s], v = self.NN.predict(state.representation())
+            # Use NN to predict P and v
+            self.P[s], v = self.NN.predict(this_state.representation())
 
             # Mask the illegal actions
-            valids = np.array(state.get_legal_actions())
+            valids = np.array(this_state.get_legal_actions())
             valids = np.array([1 if vl in valids else 0 for vl in range(self.env.action_space.shape)])
-
 
             # And adjust the policy
             self.P[s]  = self.P[s]*valids
@@ -141,44 +141,42 @@ class MCTS():
             self.N[s] = 0
             return v
 
-        # If we reach this point, that means that this state is neither a
-        # terminating state nor is it a leaf. So let's make our move based
-        # on the statistics we have.
-        cur_best = -float('inf')
-        best_act = -1
-
-        valids = np.array(state.board.get_legal_action())
-        valids = np.array([1 if vl in valids else 0 for vl in range(self.env.action_space.shape)])
-
-        # Choose the action with the highest upper confidence bound
-        for a in range(self.env.action_space.shape):
-            # If the action is a valid action for this state
-            if valids[a]:
-                if (s,a) in self.Qsa:
-                    u = self.Qsa[(s,a)] + self.cpuct*self.P[s][a]*math.sqrt(self.N[s])/(1+self.Nsa[(s,a)])
-                else:
-                    u = self.cpuct*self.P[s][a]*math.sqrt(self.N[s])
-
-                if u > cur_best:
-                    cur_best = u
-                    best_act = a
-
-        a = best_act
-
-        # See if we have to update the history
-        newstate = state.act(a)
-
-        # Recursively find the next best move from this state
-        v = self.search_move(newstate, depth=depth+1, reveal=reveal)
-
-        # Back up the new statistics
-        if (s,a) in self.Qsa:
-            self.Qsa[(s,a)]  = (self.Nsa[(s,a)]*self.Qsa[(s,a)] + v)/(self.Nsa[(s,a)]+1)
-            self.Nsa[(s,a)] += 1
         else:
-            self.Qsa[(s,a)] = v
-            self.Nsa[(s,a)] = 1
+            # If we reach this point, that means that this state is neither a
+            # terminating state nor is it a leaf. So let's choose where to move next to
+            # in our tree based on the statistics we have.
+            cur_best = -float('inf')
+            best_act = -1
 
-        # Increase the visit count for this state
-        self.N[s] += 1
-        return v
+            # Choose the action with the highest upper confidence bound
+            for a in range(self.env.action_space.shape):
+                # If the action is a valid action for this state
+                if self.P[s][a] != 0:
+                    if (s,a) in self.Qsa:
+                        u = self.Qsa[(s,a)] + self.cpuct*self.P[s][a]*math.sqrt(self.N[s])/(1+self.Nsa[(s,a)])
+                    else:
+                        u = self.cpuct*self.P[s][a]*math.sqrt(self.N[s])
+
+                    if u > cur_best:
+                        cur_best = u
+                        best_act = a
+
+            a = best_act
+
+            # See if we have to update the history
+            newstate = this_state.act(a)
+
+            # Recursively find the next best move from this state
+            v = self.search_move(newstate, depth=depth+1, reveal=reveal)
+
+            # Back up the new statistics
+            if (s,a) in self.Qsa:
+                self.Qsa[(s,a)]  = (self.Nsa[(s,a)]*self.Qsa[(s,a)] + v)/(self.Nsa[(s,a)]+1)
+                self.Nsa[(s,a)] += 1
+            else:
+                self.Qsa[(s,a)] = v
+                self.Nsa[(s,a)] = 1
+
+            # Increase the visit count for this state
+            self.N[s] += 1
+            return v

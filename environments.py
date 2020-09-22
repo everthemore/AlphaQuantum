@@ -9,14 +9,20 @@ def action_to_move_str(action):
     return "a2a4"
 
 class QuantumChessState:
-    def __init__(self, game):
+    def __init__(self, game, playerTurn):
         self.game = game
+        self.playerTurn = playerTurn
         return
 
-    # Make a move and return a copy of the game (essential for MCTS)
     def act(self, move):
+        # Perform the move
         self.game.do_move(move)
-        return QuantumChessState(self.game)
+        # Return a new game, but switch player turns
+        return QuantumChessState(self.game, -self.playerTurn)
+
+    @property
+    def done(self):
+        return False
 
     def get_legal_actions(self):
         # Get legal moves
@@ -74,41 +80,25 @@ class QuantumChessEnv(gym.Env):
         TODO
         """
 
-        # Create a Quantum Chess Game
-        self.game = QuantumChessGame()
-
-        self.num_actions = 4
+        #self.num_actions = 4
         # self.observation_space=gym.spaces.Box(low=0,high=1,shape=(2*self.d+1, 2*self.d+1, self.volume_depth+self.n_action_layers),dtype=np.uint8)
-
-        self.action_space = gym.spaces.Discrete(self.num_actions)
-
-        self.seed()
-
-        self.completed_actions = np.zeros(self.num_actions,int)
-        self.state = None
-        self.done = False
-        self.reward = 0
+        # self.action_space = gym.spaces.Discrete(self.num_actions)
+        #self.seed()
 
         # Create a new game, only so that self.reset() has something to delete
+        self.game = QuantumChessGame()
         self.game.new_game()
         self.reset()
 
-    def seed(self, seed=None):
-        self.np_random, seed1 = seeding.np_random(seed)
-        # Derive a random seed.
-        seed2 = seeding.hash_seed(seed1 + 1) % 2**32
-        return [seed1, seed2]
-
     def reset(self):
-
         # Delete the current game...
         self.game.delete_game()
         # ...and start a new one
         self.game.new_game()
 
-        # Format the gamedata
-        gamedata = self.game.get_game_data()
-        return format_gamedata(gamedata)
+        # Initial game state
+        self.state = QuantumChessState(self.game, 1)
+        return self.state.representation()
 
     def step(self, action):
         '''
@@ -127,22 +117,13 @@ class QuantumChessEnv(gym.Env):
         move = move.encode('utf-8')
 
         # perform the action
-        gamedata, move_code = self.game.do_move(move)
-
-        # Construct the observation from the gamedata
-        observation = format_gamedata(gamedata)
-
-        # Check the reward and terminal condition
-        done = (move_code == 0)
+        self.state = self.state.act(move)
 
         reward = 0
-        if( done ):
+        if( self.state.done ):
             reward = 100 if True else -100
 
-        return observation, reward, done, {}
+        return self.state.representation(), reward, self.state.done, {}
 
     def close(self):
         return
-
-    def render(self, mode="human", close=False):
-        self.game.print_probability_board()
