@@ -53,11 +53,6 @@ class MCTS:
         for i in range(self.numSims):
             self.search_move(state, depth=0, reveal=reveal)
 
-        # Optionally add dirichlet noise, w/ amplitude proportinal to the avg number of available legal moves
-        #eps = 0.25
-        #if s in self.P:
-        #    self.P[s] = list( (1-eps)*np.array(self.P[s]) + np.array(np.random.dirichlet(0.03, size=self.action_size))*eps )
-
         # See how often we performed each move
         counts = [self.Nsa[(s,a)] if (s,a) in self.Nsa else 0 for a in range(self.action_size)]
 

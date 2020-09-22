@@ -54,36 +54,52 @@ class AlphaQuantumAgent():
 
         # The current state of the game
         state = self.env.state
-
+        
+        # Reset the MC tree
+        player1 = MCTS(self.env, self.nnet, self.config)
+        player2 = MCTS(self.env, self.nnet, self.config)
+        
+        # Start with player 1 (index 0)
+        current_player_index = 0
         while True:
-	        # Get the policy vector given the current history
-            pi = self.mcts.getPolicy(state, temperature=0)
-
-            # Mask out the invalid moves
-            valids = state.get_legal_action()
-            valids = np.array([1 if vl in valids else 0 for vl in range(self.env.action_space.shape)])
-
-            # Renormalize
-            if np.sum(valids) == 0:
-                valids[0] = 1
-            pi = np.array(pi*valids); pi = pi/np.sum(pi)
-
+            
+            # Set the current player
+            current_player = player1 if current_player_index == 0 else player2
+            # Get the policy for the current player
+            pi = current_player.getPolicy(state, temperature=0)
+            
+            # TODO
+            # We should add the flipped board here (black <-> white)
+            
             # Only store the boards and the resulting policy, which is what we
             # want the neural network to learn to map
-            trainExamples.append([state.board_history, np.array(pi)])
+            trainExamples.append([state.representation(), np.array(pi)])
+            
+            # Add dirichlet noise, w/ amplitude proportinal to the avg number of available legal moves
+            #num_legal_moves = len(state.get_legal_moves())
+            #noise = 0.1 * np.random.dirichlet(0.03 * np.ones(num_legal_moves))
 
-	        # Make a greedy move
-            # action = np.argmax(pi)
             # Pick according to the probability distribution
             action = np.random.choice(len(pi), p=pi)
 
             # Move to the next state
             state = state.act(action)
+            # Reflect the move in the MCTrees too, keeping the tree but setting the 
+            # new state as the root; We don't have to
+            # player1.update(action)
+            # player2.update(action)
+            
+            # Switch player
+            current_player_index = (current_player_index + 1) % 2
 
             # If we get to a terminal state w/ non-zero reward, or a tie
-            if state.reward !=0 or state.done:
+            done, winner = state.get_game_status()
+            
+            if done:
                 print("Finished game with r = %.2f in %d moves"%(state.reward, len(trainExamples))) #int(len(trainExamples)/3)))
-                return [(x[0],x[1],state.reward) for x in trainExamples]
+                
+                # Board, Policy, v
+                return [(x[0],x[1], ((current_player_index == 0) ? 1 : -1)*winner)] for x in trainExamples]
 
     def learn(self):
         """
@@ -94,10 +110,10 @@ class AlphaQuantumAgent():
         The errorrate is increased every so often.
         """
 
-	    # Create an empty queue for storing all the training examples
+        # Create an empty queue for storing all the training examples
         trainExamples = deque([], maxlen=self.maxLenOfQueue)
 
-	    # Keep track of the number of snapshots so we can label them
+        # Keep track of the number of snapshots so we can label them
         num_snapshots = 0
 
         for i in range(self.numIterations):
@@ -111,15 +127,12 @@ class AlphaQuantumAgent():
             # TODO: Run many in parallel!
             for eps in range(self.numEpisodes):
                 # Reset the game
-		        self.env.reset()
-
-                # Reset the MC tree
-                self.mcts = MCTS(self.env, self.nnet, self.config)
+                self.env.reset()
 
                 # Run an episode and commit it to the list of training examples
                 trainExamples += self.executeEpisode()
 
-	        # Train the network
+            # Train the network
             train_history = self.nnet.train(trainExamples)
             
             if( i == 0 ):
@@ -154,14 +167,26 @@ class AlphaQuantumAgent():
             # Build the history
             state = local_env.state
 
-            while !state.done:
-                action = np.argmax(mcts.getPolicy(state, temperature=0))
+            # Start with player 1 (index 0)
+            current_player_index = 0
+            while True:
+                # Set the current player
+                current_player = currentMCTS if current_player_index == 0 else bestMCTS
+                # Get the policy for the current player
+                pi = current_player.getPolicy(state, temperature=0)
+            
+                # Greedy action selection
+                action = np.argmax(pi)
                 state = state.act(action)
+                
+                done, winner = state.get_game_status()
 
-            # The game ended, increase the number of wins if we won
-            if state.reward == 0:
-                draws += 1
-            elif state.reward == 1:
-                currentWins += 1
-
+                if done:
+                    if winner == 1:
+                        currentwins += 1
+                    if winner == -1:
+                        bestwins += 1
+                    if winner == 0:
+                        draws += 1
+                    
         return currentwins, bestwins, draws
