@@ -8,9 +8,8 @@ class MCTS:
     This class handles the MCTS.
     """
 
-    def __init__(self, env, NN, config):
-        # Store references to the environment and the neural network
-        self.env  = env
+    def __init__(self, NN, config):
+        # Store reference to the neural network
         self.NN   = NN
 
         # Store the arguments
@@ -27,7 +26,7 @@ class MCTS:
         self.V   = {}       # Stores the value function for state s
         self.Es = {}        # stores reward for board s
 
-    def getPolicy(self, state, temperature=1):
+    def getPolicy(self, game, temperature=1):
         """
         Get the policy for the current board, by performing numSims MC simulations.
 
@@ -43,7 +42,7 @@ class MCTS:
         """
 
         # Convert the latest state to a string so we can index it
-        s = state.serialize()
+        s = game.serialize()
 
         # Run numSims games from the current board position
         # to sample the available moves
@@ -51,7 +50,7 @@ class MCTS:
         # TODO this can be done in parallel using a thread pool!
         # @parallel
         for i in range(self.numSims):
-            self.search_move(state, depth=0, reveal=reveal)
+            self.search_move(game, depth=0, reveal=reveal)
 
         # See how often we performed each move
         counts = [self.Nsa[(s,a)] if (s,a) in self.Nsa else 0 for a in range(self.action_size)]
@@ -70,7 +69,7 @@ class MCTS:
         # Normalize and return
         return pi / np.sum(pi)
 
-    def search_move(self, state, depth, reveal=True):
+    def search_move(self, game, depth, reveal=True):
         """
         Recursively search for moves until we hit a leaf node (by maximizing
         the upper confidence bound (UCB)), counting as one simulation. 
@@ -91,15 +90,15 @@ class MCTS:
             return -1
 
         # Turn board into a string so that we can use it as a dictionary key (hashable)
-        s = state.serialize()
+        s = game.serialize()
         
         # Make a copy of the state
-        this_state = copy.deepcopy(state)
+        this_game = copy.deepcopy(game)
 
         # Check if this is a terminal state
         if s not in self.Es: # If we haven't seen this state before
             if this_state.done:   # If it is a final state
-                self.Es[s] = this_state.reward
+                self.Es[s] = this_game.reward
             else:            # Otherwise initialize it with 0
                 self.Es[s] = 0
 
@@ -115,10 +114,10 @@ class MCTS:
                 print("Is Leaf")
 
             # Use NN to predict P and v
-            self.P[s], v = self.NN.predict(this_state.representation())
+            self.P[s], v = self.NN.predict(this_game.representation())
 
             # Mask the illegal actions
-            valids = np.array(this_state.get_legal_actions())
+            valids = np.array(this_game.get_legal_actions())
             valids = np.array([1 if vl in valids else 0 for vl in range(self.env.action_space.shape)])
 
             # And adjust the policy
@@ -159,10 +158,10 @@ class MCTS:
             a = best_act
 
             # See if we have to update the history
-            newstate = this_state.act(a)
+            next_game = this_game.do_move(a)
 
             # Recursively find the next best move from this state
-            v = self.search_move(newstate, depth=depth+1, reveal=reveal)
+            v = self.search_move(next_game, depth=depth+1, reveal=reveal)
 
             # Back up the new statistics
             if (s,a) in self.Qsa:

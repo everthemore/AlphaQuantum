@@ -25,7 +25,7 @@ class Move(Structure):
     ("promotion_piece", c_uint8)
     ]
 
-class QuantumChessGame:
+class QuantumChess:
     def __init__(self):
         """
         Load the quantum chess shared library
@@ -149,7 +149,7 @@ class QuantumChessGame:
         print(s)
 
 if( __name__ == "__main__"):
-    QChessGame = QuantumChessGame()
+    QChessGame = QuantumChess()
     QChessGame.new_game()
 
     print("Welcome to Quantum Chess")

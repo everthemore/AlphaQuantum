@@ -8,6 +8,73 @@ def format_gamedata(gamedata):
 def action_to_move_str(action):
     return "a2a4"
 
+class QuantumChessGame:
+    def __init__(self):
+        self.game = QuantumChess()
+        self.reset()
+    
+    def get_legal_moves(self):
+        return self.game.get_legal_moves()
+    
+    def do_move(self, move):
+        move_str = int(move)
+        gameData, movecode = self.game.do_move(move_str)
+        return this
+    
+    def get_game_stats(self):
+        gameData = self.game.get_game_data()
+    
+        # Extract done and winner
+        done = False
+        blackWin = True
+        winner = -1 if blackWin else 1
+    
+        return done, winner
+    
+    def reset(self):
+        self.game.new_game()
+    
+    def get_current_player(self):
+        gameData = self.game.get_game_data()
+        return -1 if gameData.ply % 2 == 0 else 1
+    
+    def toString(self):
+        gamedata = self.game.get_game_data()
+        gamedata_str = gamedata.pieces + gamedata.probabilities;
+        return gamedata_str
+
+    def toNetworkInput(self):
+        """
+        Return a representation of the state that can be directly
+        fed into a neural network.
+        """
+        white_piece_board = np.zeros((8,8,5))
+        black_piece_board = np.zeros((8,8,5))
+
+        gamedata = self.game.get_game_data()
+        pieces = gamedata.pieces
+
+        white_pawn_indices = [(i / 8,i % 8) for i, c in enumerate(pieces) if c == 'p']
+        white_piece_board[white_pawn_indices*,0] = 1
+
+        black_pawn_indices = [(i / 8,i % 8) for i, c in enumerate(pieces) if c == 'P']
+        black_piece_board[white_pawn_indices*,0] = 1
+
+        # ETC
+
+        # Add probability plane
+        probability_plane = np.array(gamedata.probabilities).reshape(8,8)
+
+        # Add castle flags plane
+        # Add ply plane
+
+        # Stack all the planes
+        return np.stack([white_piece_board, black_piece_board], axis=2)
+    
+    
+    
+
+    
 class QuantumChessState:
     def __init__(self, game, playerTurn):
         self.game = game
@@ -69,6 +136,9 @@ class QuantumChessState:
 
         # Stack all the planes
         return np.stack([white_piece_board, black_piece_board], axis=2)
+
+    
+    
 
 class QuantumChessEnv(gym.Env):
     '''
