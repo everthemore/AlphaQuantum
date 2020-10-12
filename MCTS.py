@@ -17,10 +17,11 @@ class MCTS:
         self.numSims        = config["MCTS"]["numSims"]
         self.cpuct          = config["MCTS"]["cpuct"]
 
-        self.action_size    = self.env.action_space.shape
+        self.action_size    = 68912
 
         self.Qsa = {}       # stores Q values for s,a (as defined in the paper)
         self.Nsa = {}       # stores #times edge s,a was visited
+        self.num_valid = {} # Number of valid
         self.N   = {}       # stores #times board s was visited
         self.P   = {}       # stores initial policy (returned by neural net) for s
         self.V   = {}       # Stores the value function for state s
@@ -65,15 +66,15 @@ class MCTS:
             pi = np.zeros( len(counts) ); pi[ np.argmax(counts) ] = 1
         else:
             pi = np.array(counts)**(1/temp); pi /= np.sum(counts)
-            
+
         # Normalize and return
         return pi / np.sum(pi)
 
     def search_move(self, game, depth, reveal=True):
         """
         Recursively search for moves until we hit a leaf node (by maximizing
-        the upper confidence bound (UCB)), counting as one simulation. 
-        Once we find a leaf, we expand it and evaluate the probabilities P(a|s) 
+        the upper confidence bound (UCB)), counting as one simulation.
+        Once we find a leaf, we expand it and evaluate the probabilities P(a|s)
         by asking the neural network.
 
         The network also returns a value v, which we then propagate back up the
@@ -91,13 +92,13 @@ class MCTS:
 
         # Turn board into a string so that we can use it as a dictionary key (hashable)
         s = game.serialize()
-        
+
         # Make a copy of the state
-        this_game = copy.deepcopy(game)
+        this_game = game.copy()
 
         # Check if this is a terminal state
         if s not in self.Es: # If we haven't seen this state before
-            if this_state.done:   # If it is a final state
+            if this_game.done:   # If it is a final state
                 self.Es[s] = this_game.reward
             else:            # Otherwise initialize it with 0
                 self.Es[s] = 0
@@ -114,11 +115,17 @@ class MCTS:
                 print("Is Leaf")
 
             # Use NN to predict P and v
-            self.P[s], v = self.NN.predict(this_game.representation())
+            self.P[s], v = self.NN.predict(this_game.toNetworkInput())
 
             # Mask the illegal actions
-            valids = np.array(this_game.get_legal_actions())
-            valids = np.array([1 if vl in valids else 0 for vl in range(self.env.action_space.shape)])
+            valid_moves = this_game.get_legal_moves() # ['a2a4', 'b1^a3c3']
+            valids = np.zeros(self.action_size)
+            for v in valid_moves:
+                valids[move_to_index[v]] = 1
+            valids = np.array(valids)
+
+            # Track number of valid moves for this state
+            self.num_valid[s] = len(valids)
 
             # And adjust the policy
             self.P[s]  = self.P[s]*valids
@@ -142,8 +149,10 @@ class MCTS:
             cur_best = -float('inf')
             best_act = -1
 
+            # TODO: This for loop is slow! Can we loop over just the legal ones?
+
             # Choose the action with the highest upper confidence bound
-            for a in range(self.env.action_space.shape):
+            for a in range(self.action_size):
                 # If the action is a valid action for this state
                 if self.P[s][a] != 0:
                     if (s,a) in self.Qsa:

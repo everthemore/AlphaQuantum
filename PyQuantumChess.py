@@ -1,5 +1,6 @@
 from ctypes import *
 from sys import platform
+from struct import unpack
 
 # GameData struct
 class GameData(Structure):
@@ -25,7 +26,10 @@ class Move(Structure):
     ("promotion_piece", c_uint8)
     ]
 
-class QuantumChess:
+MoveCode = dict({0 : "FAIL", 1 : "SUCCESS", 2 : "WHITE_WIN",
+                 3 : "BLACK_WIN", 4 : "MUTUAL_WIN", 5 : "DRAW"})
+
+class QuantumChessEngine:
     def __init__(self):
         """
         Load the quantum chess shared library
@@ -76,18 +80,18 @@ class QuantumChess:
         self.QChess_lib.get_game_data.restype = c_long
 
         #QUANTUM_CHESS_API long get_history(GameVariant* game, QC::Move* out_buffer, size_t buffer_size, size_t* out_size);
-        self.QChess_lib.get_history.argtypes = [POINTER(c_int), POINTER(Move), c_size_t, POINTER(c_size_t)]
+        self.QChess_lib.get_history.argtypes = [POINTER(c_int), POINTER(POINTER(Move)), c_size_t, POINTER(c_size_t)]
         self.QChess_lib.get_history.restype = c_long
 
         #QUANTUM_CHESS_API long get_legal_moves(GameVariant* game, QC::Move* out_buffer, size_t buffer_size, size_t* out_size);
-        self.QChess_lib.get_legal_moves.argtypes = [POINTER(c_int), POINTER(Move), c_size_t, POINTER(c_size_t)]
+        self.QChess_lib.get_legal_moves.argtypes = [POINTER(c_int), POINTER(POINTER(Move)), c_size_t, POINTER(c_size_t)]
         self.QChess_lib.get_legal_moves.restype = c_long
 
         # Create a new gamedata struct
         self.gamedata = GameData()
 
     def new_game(self, initial_state=""):
-        initial_state_fen = "fen rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1" if initial_state == "" else initial_state
+        initial_state_fen = "position fen rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1 moves " if initial_state == "" else initial_state
         initial_state_fen = initial_state_fen.encode('utf-8')
         resturl = "".encode('utf-8')
         self.GamePtr = self.QChess_lib.new_game(initial_state_fen, c_bool(True), c_bool(True), resturl);
@@ -98,7 +102,7 @@ class QuantumChess:
     def do_move(self, move_str):
         move_code = c_int(0)
         result = self.QChess_lib.do_move(self.GamePtr, move, byref(self.gamedata), byref(move_code))
-        return self.gamedata, move_code
+        return self.gamedata, move_code.value
 
     def undo_move(self):
         move_code = c_int(0)
@@ -110,17 +114,19 @@ class QuantumChess:
         return self.gamedata
 
     def get_history(self):
-        moves = Move()
-        buffer_size = c_size_t(10)
+        moves = POINTER(Move)()
+        buffer_size = c_size_t(sizeof(Move))
         out_size = c_size_t(10)
         result = self.QChess_lib.get_history(self.GamePtr, byref(moves), buffer_size, byref(out_size) )
-        return moves
+        move_history = [moves[i*sizeof(Move)] for i in range(out_size.value)]
+        return move_history
 
     def get_legal_moves(self):
-        moves = Move()
-        buffer_size = c_size_t(10)
+        moves = POINTER(Move)()
+        buffer_size = c_size_t(sizeof(Move))
         out_size = c_size_t(10)
         result = self.QChess_lib.get_legal_moves(self.GamePtr, byref(moves), buffer_size, byref(out_size) )
+        moves = [moves[i*sizeof(Move)] for i in range(out_size.value)]
         return moves
 
     def print_probability_board(self):
@@ -149,8 +155,8 @@ class QuantumChess:
         print(s)
 
 if( __name__ == "__main__"):
-    QChessGame = QuantumChess()
-    QChessGame.new_game()
+    QChessEngine = QuantumChessEngine()
+    QChessEngine.new_game()
 
     print("Welcome to Quantum Chess")
     print("Use CTRL+C (or CMD+C) to quit")
@@ -158,5 +164,16 @@ if( __name__ == "__main__"):
         # Get input string
         move = input("Enter your next move: ").encode('utf-8')
 
-        gamedata, move_code = QChessGame.do_move(move)
-        QChessGame.print_probability_board()
+        gamedata, move_code = QChessEngine.do_move(move)
+        print("Resulted in movecode: ", MoveCode[move_code])
+        QChessEngine.print_probability_board()
+
+        move_history = QChessEngine.get_history()
+
+        for move in move_history:
+            print(sizeof(move))
+            print(move._fields_)
+            print(move.contents)
+
+            for field in move._fields_:
+                print(field[0], getattr(move, field[0]))
