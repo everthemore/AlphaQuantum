@@ -75,7 +75,8 @@ def get_classical_knight_moves(row, column):
 def get_quantum_queen_moves(row, column):
     source = column_names[column] + row_names[row]
 
-    moves = []
+    split_moves = []
+    merge_moves = []
 
     classical_moves = get_classical_queen_moves(row, column)
 
@@ -88,12 +89,42 @@ def get_quantum_queen_moves(row, column):
             if( target2 == target1 ):
                 continue
 
-            movestr = source + "^" + target1 + target2
+            split = source + "^" + target1 + target2
+            if( split not in split_moves ):
+                split_moves.append(split)
 
-            if( movestr not in moves ):
-                moves.append(movestr)
+            merge = target1 + target2 + "^" + source
+            if( merge not in merge_moves ):
+                merge_moves.append(merge)
 
-    return moves
+    return split_moves, merge_moves
+
+def get_quantum_knight_moves(row, column):
+    source = column_names[column] + row_names[row]
+
+    split_moves = []
+    merge_moves = []
+
+    classical_moves = get_classical_knight_moves(row, column)
+
+    for move1 in classical_moves:
+        target1 = move1[2:]
+
+        for move2 in classical_moves:
+            target2 = move2[2:]
+
+            if( target2 == target1 ):
+                continue
+
+            split = source + "^" + target1 + target2
+            if( split not in split_moves ):
+                split_moves.append(split)
+
+            merge = target1 + target2 + "^" + source
+            if( merge not in merge_moves ):
+                merge_moves.append(merge)
+
+    return split_moves, merge_moves
 
 def enumerate_all_moves():
     move_counter = 0
@@ -106,19 +137,32 @@ def enumerate_all_moves():
 
             ### Classical moves
             #### Queen moves
-            # classical_queen_moves = get_classical_queen_moves(i,j)
-            # for move in classical_queen_moves:
-            #     move_to_index[move] = move_counter
-            #     move_counter += 1
-            #
-            # #### Knight moves
-            # classical_knight_moves = get_classical_knight_moves(i,j)
-            # for move in classical_knight_moves:
-            #     move_to_index[move] = move_counter
-            #     move_counter += 1
+            classical_queen_moves = get_classical_queen_moves(i,j)
+            for move in classical_queen_moves:
+                move_to_index[move] = move_counter
+                move_counter += 1
 
-            quantum_queen_moves = get_quantum_queen_moves(i,j)
-            for move in quantum_queen_moves:
+            #### Knight moves
+            classical_knight_moves = get_classical_knight_moves(i,j)
+            for move in classical_knight_moves:
+                move_to_index[move] = move_counter
+                move_counter += 1
+
+            queen_split_moves, queen_merge_moves = get_quantum_queen_moves(i,j)
+            for move in queen_split_moves:
+                move_to_index[move] = move_counter
+                move_counter += 1
+
+            for move in queen_merge_moves:
+                move_to_index[move] = move_counter
+                move_counter += 1
+
+            knight_split_moves, knight_merge_moves = get_quantum_knight_moves(i,j)
+            for move in knight_split_moves:
+                move_to_index[move] = move_counter
+                move_counter += 1
+
+            for move in knight_merge_moves:
                 move_to_index[move] = move_counter
                 move_counter += 1
 
