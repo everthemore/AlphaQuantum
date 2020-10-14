@@ -140,30 +140,36 @@ def enumerate_all_moves():
             classical_queen_moves = get_classical_queen_moves(i,j)
             for move in classical_queen_moves:
                 move_to_index[move] = move_counter
+                index_to_move[move_counter] = move
                 move_counter += 1
 
             #### Knight moves
             classical_knight_moves = get_classical_knight_moves(i,j)
             for move in classical_knight_moves:
                 move_to_index[move] = move_counter
+                index_to_move[move_counter] = move
                 move_counter += 1
 
             queen_split_moves, queen_merge_moves = get_quantum_queen_moves(i,j)
             for move in queen_split_moves:
                 move_to_index[move] = move_counter
+                index_to_move[move_counter] = move
                 move_counter += 1
 
             for move in queen_merge_moves:
                 move_to_index[move] = move_counter
+                index_to_move[move_counter] = move
                 move_counter += 1
 
             knight_split_moves, knight_merge_moves = get_quantum_knight_moves(i,j)
             for move in knight_split_moves:
                 move_to_index[move] = move_counter
+                index_to_move[move_counter] = move
                 move_counter += 1
 
             for move in knight_merge_moves:
                 move_to_index[move] = move_counter
+                index_to_move[move_counter] = move
                 move_counter += 1
 
     return move_to_index, index_to_move

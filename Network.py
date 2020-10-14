@@ -3,17 +3,17 @@ import numpy as np
 from keras.models import *
 from keras.layers import *
 from keras.optimizers import *
+from enumerate_actions import *
 import os
 
 class Network():
-    def __init__(self, env, config):
+    def __init__(self, config):
         """
         A wrapper around a residual neural network tower that is used to predict
         new moves and outcomes of a given (set of) game boards.
 
         Inputs
         ------
-        env             - an instance of an openAI Gym environment
         config          - a valid Json configuration file
         """
         # Store the configuration arguments
@@ -25,20 +25,23 @@ class Network():
         self.batch_size         = config["Network"]["batchSize"]
         self.len_history        = config["numHistory"]
 
+        self.num_planes         = 7
+
         # Store some information about the game we're training our brain on
-        self.board_x, self.board_y = 2*env.board_size, 2*env.board_size
-        self.action_size           = env.action_space.shape
+        self.board_x, self.board_y = 8, 8
+        self.action_size           = config["action_size"]
 
         # Build the neural network
-        self.__buildnet()
+        print("NOT BUILDING NETWORK")
+        # self.__buildnet()
 
     def __buildnet(self):
         """
         Build the network model using Keras.
         """
         # Neural Net
-        self.input_boards = Input(shape=(self.len_history, self.board_x, self.board_y))
-        x_image = Reshape((self.len_history, self.board_x, self.board_y))(self.input_boards)
+        self.input_boards = Input(shape=(self.len_history, self.board_x, self.board_y, self.num_planes))
+        x_image = Reshape((self.len_history, self.board_x, self.board_y, self.num_planes))(self.input_boards)
 
         np.random.seed(0)
         h_conv1 = Activation('relu')(BatchNormalization()(Conv2D(self.numFilters, self.convsize, padding='same',data_format='channels_first')(x_image)))
@@ -64,6 +67,9 @@ class Network():
         ------
         examples (list): list of examples, each example is of form (board, pi, v)
         """
+        print("NOT TRAINING")
+        return
+
         input_boards, target_pis, target_vs = list(zip(*examples))
         input_boards = np.asarray(input_boards)
         target_pis = np.asarray(target_pis)
@@ -78,6 +84,9 @@ class Network():
         ------
         board: np array representing the game board
         """
+        print("RANDOM PREDICTION")
+        return np.random.uniform(0, 1, self.action_size), np.random.uniform(-1,1)
+
         board_history = board_history[np.newaxis, :, :, :]
         pi, v = self.model.predict(board_history)
         return pi[0], v[0][0]

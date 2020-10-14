@@ -3,6 +3,9 @@ import math
 import numpy as np
 import copy
 
+from enumerate_actions import enumerate_all_moves
+move_to_index, index_to_move = enumerate_all_moves()
+
 class MCTS:
     """
     This class handles the MCTS.
@@ -17,7 +20,7 @@ class MCTS:
         self.numSims        = config["MCTS"]["numSims"]
         self.cpuct          = config["MCTS"]["cpuct"]
 
-        self.action_size    = 68912
+        self.action_size    = len(move_to_index)
 
         self.Qsa = {}       # stores Q values for s,a (as defined in the paper)
         self.Nsa = {}       # stores #times edge s,a was visited
@@ -27,7 +30,7 @@ class MCTS:
         self.V   = {}       # Stores the value function for state s
         self.Es = {}        # stores reward for board s
 
-    def getPolicy(self, game, temperature=1):
+    def get_policy(self, game, temperature=1):
         """
         Get the policy for the current board, by performing numSims MC simulations.
 
@@ -51,7 +54,7 @@ class MCTS:
         # TODO this can be done in parallel using a thread pool!
         # @parallel
         for i in range(self.numSims):
-            self.search_move(game, depth=0, reveal=reveal)
+            self.search_move(game, depth=0)
 
         # See how often we performed each move
         counts = [self.Nsa[(s,a)] if (s,a) in self.Nsa else 0 for a in range(self.action_size)]
@@ -70,7 +73,7 @@ class MCTS:
         # Normalize and return
         return pi / np.sum(pi)
 
-    def search_move(self, game, depth, reveal=True):
+    def search_move(self, game, depth):
         """
         Recursively search for moves until we hit a leaf node (by maximizing
         the upper confidence bound (UCB)), counting as one simulation.
@@ -88,7 +91,7 @@ class MCTS:
         if depth > 100:
             # Maximum recursion depth
             print("Too many attempts to find an endgame! Game lost")
-            return -1
+            return -100
 
         # Turn board into a string so that we can use it as a dictionary key (hashable)
         s = game.serialize()
@@ -120,8 +123,8 @@ class MCTS:
             # Mask the illegal actions
             valid_moves = this_game.get_legal_moves() # ['a2a4', 'b1^a3c3']
             valids = np.zeros(self.action_size)
-            for v in valid_moves:
-                valids[move_to_index[v]] = 1
+            for vm in valid_moves:
+                valids[move_to_index[vm]] = 1
             valids = np.array(valids)
 
             # Track number of valid moves for this state
@@ -167,10 +170,10 @@ class MCTS:
             a = best_act
 
             # See if we have to update the history
-            next_game = this_game.do_move(a)
+            next_game = this_game.do_move(index_to_move[a])
 
             # Recursively find the next best move from this state
-            v = self.search_move(next_game, depth=depth+1, reveal=reveal)
+            v = self.search_move(next_game, depth=depth+1)
 
             # Back up the new statistics
             if (s,a) in self.Qsa:
@@ -182,4 +185,7 @@ class MCTS:
 
             # Increase the visit count for this state
             self.N[s] += 1
+            # We no longer need this game
+            this_game.delete()
+
             return v

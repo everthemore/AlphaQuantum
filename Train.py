@@ -1,10 +1,15 @@
 from __future__ import division
 from Network import *
 from Agent import *
+from QuantumChessGame import *
 
 import gym
 import argparse, json
 import sys, os, datetime
+
+from enumerate_actions import enumerate_all_moves
+move_to_index, index_to_move = enumerate_all_moves()
+
 
 #
 # Parse arguments passed to the program (or set defaults)
@@ -31,11 +36,12 @@ args = parser.parse_args()
 #
 # Make sure the save-dir exists
 #
-if not os.path.exists("./models-d-%d"%args.distance):
-    os.mkdir("./models-d-%d"%args.distance)
-checkpoint = './models-d-%d/%s/'%(args.distance,datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
+if not os.path.exists("./models"):
+    os.mkdir("./models")
+checkpoint = './models/%s/'%(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
 if not os.path.exists(checkpoint):
     os.mkdir(checkpoint)
+
 
 if args.file is not None:
     with open(args.file, "r") as f:
@@ -46,8 +52,8 @@ else:
     JsonConfig = {
         "verbose":              args.verbose,
         "savedir":              checkpoint,
-        "distance":             args.distance,
         "numHistory":           args.numHistory,
+        "action_size":          len(move_to_index),
 
         "Training": {
             "numIterations":    args.numIterations,
@@ -76,11 +82,12 @@ with open('%s/config.json'%checkpoint,'w') as f:
     json.dump(JsonConfig, f, indent=4)
 
 # Set up the environment
-env = QuantumChessEnv()
+#game = QuantumChessGame()
+
 # Create a new neural network
-nnet = Network(env, JsonConfig)
+nnet = Network(JsonConfig)
 # Create a new agent, whose brain is the network we just created
-c = AlphaQuantumAgent(env, nnet, JsonConfig)
+c = AlphaQuantumAgent(nnet, JsonConfig)
 
 # Start the main training loop
 c.learn()

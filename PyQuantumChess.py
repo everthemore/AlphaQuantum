@@ -16,9 +16,9 @@ class GameData(Structure):
 
 class Move(Structure):
     _fields_ = [
-    ("square1", c_int),
-    ("square2", c_int),
-    ("square3", c_int),
+    ("square1", c_uint8),
+    ("square2", c_uint8),
+    ("square3", c_uint8),
     ("type", c_uint8),
     ("variant", c_uint8),
     ("does_measurement", c_bool),
@@ -26,8 +26,40 @@ class Move(Structure):
     ("promotion_piece", c_uint8)
     ]
 
+row_names = ["1","2","3","4","5","6","7","8"]
+column_names = ["a", "b", "c", "d", "e", "f", "g", "h"]
 MoveCode = dict({0 : "FAIL", 1 : "SUCCESS", 2 : "WHITE_WIN",
                  3 : "BLACK_WIN", 4 : "MUTUAL_WIN", 5 : "DRAW"})
+
+def square_number_to_str(square_number) -> str:
+    column = int(square_number % 8)
+    row = int(square_number / 8)
+    return column_names[column] + row_names[row]
+
+def format_moves(moves) -> str:
+    allmoves = []
+    for move in moves:
+        # Split move
+        if( move["type"] == 4 or move["type"] == 5 ):
+            movestr = square_number_to_str(move["square1"]) + "^" \
+                    + square_number_to_str(move["square2"]) \
+                    + square_number_to_str(move["square3"])
+        # Merge move
+        elif( move["type"] == 6 or move["type"] == 7 ):
+            movestr = square_number_to_str(move["square1"]) \
+                    + square_number_to_str(move["square2"]) + "^" \
+                    + square_number_to_str(move["square3"])
+        # Standard
+        else:
+            movestr = square_number_to_str(move["square1"]) + square_number_to_str(move["square2"])
+
+        # Was this a measurement?
+        if( move["does_measurement"] ):
+            movestr += ".m" + str(move["measurement_outcome"])
+
+        allmoves.append(movestr)
+
+    return allmoves
 
 class QuantumChessEngine:
     def __init__(self):
@@ -80,11 +112,11 @@ class QuantumChessEngine:
         self.QChess_lib.get_game_data.restype = c_long
 
         #QUANTUM_CHESS_API long get_history(GameVariant* game, QC::Move* out_buffer, size_t buffer_size, size_t* out_size);
-        self.QChess_lib.get_history.argtypes = [POINTER(c_int), POINTER(POINTER(Move)), c_size_t, POINTER(c_size_t)]
+        self.QChess_lib.get_history.argtypes = [POINTER(c_int), POINTER(Move), c_size_t, POINTER(c_size_t)]
         self.QChess_lib.get_history.restype = c_long
 
         #QUANTUM_CHESS_API long get_legal_moves(GameVariant* game, QC::Move* out_buffer, size_t buffer_size, size_t* out_size);
-        self.QChess_lib.get_legal_moves.argtypes = [POINTER(c_int), POINTER(POINTER(Move)), c_size_t, POINTER(c_size_t)]
+        self.QChess_lib.get_legal_moves.argtypes = [POINTER(c_int), POINTER(Move), c_size_t, POINTER(c_size_t)]
         self.QChess_lib.get_legal_moves.restype = c_long
 
         # Create a new gamedata struct
@@ -101,7 +133,7 @@ class QuantumChessEngine:
 
     def do_move(self, move_str):
         move_code = c_int(0)
-        result = self.QChess_lib.do_move(self.GamePtr, move, byref(self.gamedata), byref(move_code))
+        result = self.QChess_lib.do_move(self.GamePtr, move_str.encode('utf-8'), byref(self.gamedata), byref(move_code))
         return self.gamedata, move_code.value
 
     def undo_move(self):
@@ -114,20 +146,32 @@ class QuantumChessEngine:
         return self.gamedata
 
     def get_history(self):
-        moves = POINTER(Move)()
-        buffer_size = c_size_t(sizeof(Move))
-        out_size = c_size_t(10)
-        result = self.QChess_lib.get_history(self.GamePtr, byref(moves), buffer_size, byref(out_size) )
-        move_history = [moves[i*sizeof(Move)] for i in range(out_size.value)]
-        return move_history
+        moves = (Move*256)()
+        out_size = c_size_t()
+        result = self.QChess_lib.get_history(self.GamePtr, moves, sizeof(Move)*256, byref(out_size) )
+
+        allMoves = []
+        for move in moves[:out_size.value]:
+            thisMove = {}
+            for field in move._fields_:
+                thisMove[field[0]] = getattr(move, field[0])
+
+            allMoves.append(thisMove)
+        return allMoves
 
     def get_legal_moves(self):
-        moves = POINTER(Move)()
-        buffer_size = c_size_t(sizeof(Move))
-        out_size = c_size_t(10)
-        result = self.QChess_lib.get_legal_moves(self.GamePtr, byref(moves), buffer_size, byref(out_size) )
-        moves = [moves[i*sizeof(Move)] for i in range(out_size.value)]
-        return moves
+        moves = (Move*2048)()
+        out_size = c_size_t()
+        result = self.QChess_lib.get_legal_moves(self.GamePtr, moves, sizeof(Move)*2048, byref(out_size) )
+
+        allMoves = []
+        for move in moves[:out_size.value]:
+            thisMove = {}
+            for field in move._fields_:
+                thisMove[field[0]] = getattr(move, field[0])
+
+            allMoves.append(thisMove)
+        return allMoves
 
     def print_probability_board(self):
         """Renders a ASCII diagram showing the board probabilities."""
@@ -154,6 +198,8 @@ class QuantumChessEngine:
 
         print(s)
 
+
+
 if( __name__ == "__main__"):
     QChessEngine = QuantumChessEngine()
     QChessEngine.new_game()
@@ -161,19 +207,21 @@ if( __name__ == "__main__"):
     print("Welcome to Quantum Chess")
     print("Use CTRL+C (or CMD+C) to quit")
     while True:
+
+        valid_moves = QChessEngine.get_legal_moves()
+        valid_moves = format_moves(valid_moves)
+        print(valid_moves[:10])
+
         # Get input string
-        move = input("Enter your next move: ").encode('utf-8')
+        move = input("Enter your next move: ")
 
         gamedata, move_code = QChessEngine.do_move(move)
         print("Resulted in movecode: ", MoveCode[move_code])
         QChessEngine.print_probability_board()
 
         move_history = QChessEngine.get_history()
+        move_history = format_moves(move_history)
+        print(" ".join(move_history[:3]))
 
-        for move in move_history:
-            print(sizeof(move))
-            print(move._fields_)
-            print(move.contents)
-
-            for field in move._fields_:
-                print(field[0], getattr(move, field[0]))
+        game_data = QChessEngine.get_game_data()
+        print(game_data.ply)
