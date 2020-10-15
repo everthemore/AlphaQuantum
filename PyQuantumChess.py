@@ -223,5 +223,8 @@ if( __name__ == "__main__"):
         move_history = format_moves(move_history)
         print(" ".join(move_history[:3]))
 
-        game_data = QChessEngine.get_game_data()
-        print(game_data.ply)
+        #game_data = QChessEngine.get_game_data()
+        print(gamedata.ply)
+
+        for prob in gamedata.probabilities:
+            print(prob)

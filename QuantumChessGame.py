@@ -28,12 +28,11 @@ class QuantumChessGame:
         return moves
 
     def do_move(self, move_str):
-        gameData, movecode = self.game.do_move(str(move_str))
+        gamedata, movecode = self.game.do_move(str(move_str))
 
         self.move_history = self.game.get_history()
 
         # Keep track of the piece boards for network input
-        gamedata = self.game.get_game_data()
         self.piece_history.append(gamedata.pieces)
         self.probability_history.append(gamedata.probabilities)
 
@@ -71,7 +70,7 @@ class QuantumChessGame:
 
     def serialize(self) -> str:
         gamedata = self.game.get_game_data()
-        gamedata_str = gamedata.pieces + gamedata.probabilities;
+        gamedata_str = str(gamedata.pieces)[2:-1] + " " + " ".join(["%.2f"%a for a in gamedata.probabilities]);
         return gamedata_str
 
     def toNetworkInput(self):
