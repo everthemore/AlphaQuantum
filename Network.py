@@ -84,7 +84,7 @@ class Network():
         ------
         board: np array representing the game board
         """
-        print("RANDOM PREDICTION")
+        print("RANDOM PREDICTION ", board_history.shape)
         return np.random.uniform(0, 1, self.action_size), np.random.uniform(-1,1)
 
         board_history = board_history[np.newaxis, :, :, :]

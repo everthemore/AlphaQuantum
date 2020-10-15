@@ -88,7 +88,7 @@ class MCTS:
             v: the expected reward in this state
         """
 
-        if depth > 100:
+        if depth > self.config["MCTS"]["max_search_depth"]:
             # Maximum recursion depth
             print("Too many attempts to find an endgame! Game lost")
             return -100

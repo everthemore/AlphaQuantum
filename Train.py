@@ -17,6 +17,7 @@ move_to_index, index_to_move = enumerate_all_moves()
 parser = argparse.ArgumentParser()
 parser.add_argument("-f", "--file", help="Config file to load (overrides other settings)")
 parser.add_argument("--numTrainSims", type=int, default=200, help="Number of MCTS simulations during training")
+parser.add_argument("--maxSearchDepth", type=int, default=200, help="Max MCTS depth")
 parser.add_argument("--numHistory", type=int, default=1, help="Number of steps of history tracked by the Agent")
 parser.add_argument("--numIterations", type=int, default=100, help="Number of iterations during training. Each iteration has numEpisodes training examples.")
 parser.add_argument("--numContests", type=int, default=10, help="Number of contests between current and best network.")
@@ -65,6 +66,7 @@ else:
         "MCTS": {
             "numSims":          args.numTrainSims,
             "cpuct":            args.cpuct,
+            "max_search_depth": args.maxSearchDepth,
         },
 
         "Network": {

@@ -13,9 +13,14 @@ class QuantumChessGame:
         # This will create a new copy
         self.reset(other.move_history)
 
+        # TODO: Check that this is properly COPIED!
+
         # Overwrite done and reward
         self.done = other.done
         self.reward = other.reward
+        # Overwrite piece history
+        self.piece_history = other.piece_history
+        self.probability_history = other.probability_history
 
     def get_legal_moves(self):
         moves = self.game.get_legal_moves()
@@ -26,6 +31,11 @@ class QuantumChessGame:
         gameData, movecode = self.game.do_move(str(move_str))
 
         self.move_history = self.game.get_history()
+
+        # Keep track of the piece boards for network input
+        gamedata = self.game.get_game_data()
+        self.piece_history.append(gamedata.pieces)
+        self.probability_history.append(gamedata.probabilities)
 
         # Check if we're in a terminal state
         if( movecode > 1 ):
@@ -52,6 +62,8 @@ class QuantumChessGame:
         self.done = False
         self.winner = 0
         self.reward = 0
+        self.piece_history = []
+        self.probability_history = []
 
     def get_current_player(self) -> int:
         gameData = self.game.get_game_data()
@@ -65,13 +77,39 @@ class QuantumChessGame:
     def toNetworkInput(self):
         """
         Return a representation of the state that can be directly
-        fed into a neural network.
+        fed into the neural network.
         """
+        all_planes = []
+
+        # History goes 8 steps back
+        for t in range(8):
+            if t < len(self.piece_history):
+                white_piece_boards, black_piece_boards = self.format_piece_boards(self.piece_history[-t])
+                probability_plane = np.array(self.probability_history[-t]).reshape(8,8,1)
+            else: # Just zeros
+                white_piece_boards, black_piece_boards = np.zeros((8,8,6)), np.zeros((8,8,6))
+                probability_plane = np.zeros((8,8,1))
+
+            # TODO: Repetition planes?
+
+            if( len(all_planes) == 0 ):
+                all_planes = np.concatenate([white_piece_boards, black_piece_boards, probability_plane], axis=2)
+            else:
+                all_planes = np.concatenate([all_planes, white_piece_boards, black_piece_boards, probability_plane], axis=2)
+
+        # Add castle flags plane
+        # Add ply plane
+
+        # Add a plane that indicates whose turn it is (i.e. all 0 or all +1)
+        player_turn_board = np.ones((8,8,1))*self.get_current_player()
+
+        # Stack all the planes
+        all_planes = np.concatenate([all_planes, player_turn_board], axis=2)
+        return all_planes
+
+    def format_piece_boards(self,pieces):
         white_piece_board = np.zeros((8,8,6))
         black_piece_board = np.zeros((8,8,6))
-
-        gamedata = self.game.get_game_data()
-        pieces = gamedata.pieces
 
         white_pawn_indices = [(i / 8, i % 8) for i, c in enumerate(pieces) if c == 'p']
         white_piece_board[white_pawn_indices, 0] = 1
@@ -99,20 +137,7 @@ class QuantumChessGame:
         black_king_indices = [(i / 8, i % 8) for i, c in enumerate(pieces) if c == 'K']
         black_piece_board[black_king_indices, 5] = 1
 
-        # ETC
-
-        # Add probability plane
-        probability_plane = np.array(gamedata.probabilities).reshape(8,8,1)
-
-        # Add castle flags plane
-        # Add ply plane
-
-        # Add a plane that indicates whose turn it is (i.e. all 0 or all +1)
-        player_turn_board = np.ones((8,8,1))*self.get_current_player()
-
-        # Stack all the planes
-        all_planes = np.concatenate([white_piece_board, black_piece_board, probability_plane, player_turn_board], axis=2)
-        return all_planes
+        return white_piece_board, black_piece_board
 
     def copy(self):
         # Return a (deep) copy of this game
